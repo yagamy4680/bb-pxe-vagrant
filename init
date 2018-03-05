@@ -1,0 +1,57 @@
+#!/bin/bash
+
+CURRENT=$(pwd)
+
+exit 0
+
+# Install `gcc-multilib` because arm-none-eabi-xxx are compiled for
+# 32-bits platform on Linux, that requires ia32-libs.
+#
+echo "installing gcc-multilib for cross-compiler's 32bits executable on linux 64-bits machine"
+apt-get install -y gcc-multilib -qq
+
+echo "installing vim ..."
+apt-get install -y vim -qq
+
+echo "installing cmake ..."
+apt-get install -y cmake -qq
+
+echo "installing pip ..."
+apt-get install -y python-pip -qq
+
+# Make sure clib / cmocka are installed.
+#
+if [ "" == "$(which clib)" ]; then
+	echo "installing clib ..."
+	apt-get install libcurl4-gnutls-dev -qq
+	git clone https://github.com/clibs/clib.git /tmp/clib && cd /tmp/clib && make && make install
+	[ "0" != "$?" ] && echo "failed to build and install clib" && exit 1
+fi
+
+if [ "" == "$(pkg-config --libs cmocka)" ]; then
+	echo "[clib] installing cmocka ..."
+	clib install cmocka && ldconfig
+	[ "0" != "$?" ] && echo "failed to build and install cmocka" && exit 1
+fi
+
+# Install csvkit for mb_build script
+#
+if [ "" == "$(which csvsort)" ]; then
+	echo "installing csvkit ..."
+	pip install csvkit
+fi
+
+# Add PATH and CC_DIR
+#
+TMP=$(mktemp)
+cat <<EOF > ${TMP}
+# Added by mcu_dev script
+#
+PATH=\$PATH:/home/vagrant/workspaces/_scripts
+export CC_DIR=/opt/cross-compilers
+EOF
+
+[ "" == "$(grep mcu_dev /home/vagrant/.bashrc)" ] && cat ${TMP} >> /home/vagrant/.bashrc
+[ "" == "$(grep mcu_dev /root/.bashrc)" ] && cat ${TMP} >> /root/.bashrc
+
+rm -f ${TMP}
