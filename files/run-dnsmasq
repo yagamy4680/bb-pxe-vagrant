@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+
+function sync_files {
+	local DST_DIR="/opt/files"
+	local SRC_DIR="/vagrant/files"
+	mkdir -p ${DST_DIR}
+	rsync ${SRC_DIR}/* ${DST_DIR}/
+}
+
+function run {
+	dnsmasq \
+		-d \
+		-C /opt/files/dnsmasq.conf
+}
+
+sync_files
+run $@
