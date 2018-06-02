@@ -65,34 +65,32 @@ Vagrant.configure(2) do |config|
         "--productid", "9700"
     ]
 
-    '''
     # Realtek USB 10/100 LAN
     #
-    vb.customize ["usbfilter", "add", "0",
+    vb.customize ["usbfilter", "add", "1",
         "--target", :id,
         "--name", "USB 10/100 LAN",
         "--vendorid", "0BDA",
         "--productid", "8152"
     ]
-    '''
+
+    # DM9621A USB To FastEther
+    #
+    vb.customize ["usbfilter", "add", "1",
+        "--target", :id,
+        "--name", "DM9621A USB To FastEther",
+        "--vendorid", "0A46",
+        "--productid", "1269"
+    ]
 
     # FTDI TTL232R-3V3
     #
-    vb.customize ["usbfilter", "add", "1",
+    vb.customize ["usbfilter", "add", "2",
         "--target", :id,
         "--name", "TTL232R-3V3",
         "--vendorid", "0403",
         "--productid", "6001",
         "--manufacturer", "FTDI"
-    ]
-
-    # CSR Bluetooth-LE Dongle
-    #
-    vb.customize ["usbfilter", "add", "2",
-        "--target", :id,
-        "--name", "CSR8510 A10",
-        "--vendorid", "0A12",
-        "--productid", "0001"
     ]
 
     # Realtek 802.11n WLAN Adapter
