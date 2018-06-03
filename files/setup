@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+
+function run_cmd {
+	echo "$@"
+	${BASH} -c "$@"
+}
+
+function dump_file {
+	local FILE=$1
+	[ ! -f "${FILE}" ] && echo "${FILE} is missing (no dump)" && return 1
+	echo "${FILE} ..."
+	cat ${FILE} | awk '{printf "\t%s\n", $0}'
+}
+
+function configure_as_router {
+	local CONF="/tmp/dnsmasq.conf"
+	local SUBNET="192.168.20"
+	local SGW="${SUBNET}.1"
+
+	local WAN=$(find /sys/class/net/ -type l -name 'enp*' | xargs basename)
+	local LAN=$(find /sys/class/net/ -type l -name 'enx*' | xargs basename)
+	echo "WAN = ${WAN}"
+	echo "LAN = ${LAN}"
+	[ "" == "${WAN}" ] && echo "missing WAN interface..." && return 1
+	[ "" == "${LAN}" ] && echo "missing LAN interface..." && return 2
+
+	local ROUTER=$(cat /var/lib/dhcp/dhclient.${WAN}.leases | grep routers | tail -n1 | awk '{print $3}' | sed 's/;//g')
+	[ "" == "${ROUTER}" ] && echo "missing the ip address of wireless router" && return 3
+
+	rm -f ${CONF}
+	echo "interface=${LAN}" >> ${CONF}
+	echo "dhcp-range=${SUBNET}.50,${SUBNET}.150,12h" >> ${CONF}
+	echo "dhcp-leasefile=/tmp/dnsmasq.leases" >> ${CONF}
+	dump_file ${CONF}
+	
+	echo "checking dhclient for ${LAN} ..."
+	ps aux | grep dhclient | grep ${LAN}
+	ps aux | grep dhclient | grep ${LAN} | awk '{print $2}' | xargs -I{} sh -c "kill {}"
+
+	run_cmd "ifconfig ${LAN} ${SGW} netmask 255.255.255.0 up"
+	run_cmd "echo 1 | tee /proc/sys/net/ipv4/ip_forward"
+	run_cmd "/sbin/iptables -t nat -A POSTROUTING -s ${SUBNET}.0/24 -o ${WAN} -j MASQUERADE"
+	run_cmd "/sbin/route add default gw ${ROUTER} ${WAN}"
+
+	echo "please run '/usr/sbin/dnsmasq -d --conf-file=/tmp/dnsmasq.conf'"
+}
+
+configure_as_router $@

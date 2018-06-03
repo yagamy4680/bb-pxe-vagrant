@@ -53,7 +53,8 @@ Vagrant.configure(2) do |config|
       "--memory", "1024",
       "--paravirtprovider", "kvm", # for linux guest
       "--usb", "on",
-      "--usbehci", "on"
+      "--usbehci", "on",
+      "--usbxhci", "on",  # Enable USB3
     ]
 
     # ICS Advent, USB 2.0 10/100M Ethernet Adaptor
@@ -83,14 +84,14 @@ Vagrant.configure(2) do |config|
         "--productid", "1269"
     ]
 
-    # FTDI TTL232R-3V3
+    # Realtek USB 10/100/1000 LAN
     #
     vb.customize ["usbfilter", "add", "2",
         "--target", :id,
-        "--name", "TTL232R-3V3",
-        "--vendorid", "0403",
-        "--productid", "6001",
-        "--manufacturer", "FTDI"
+        "--name", "USB 10/100/1000 LAN",
+        "--vendorid", "0BDA",
+        "--productid", "8153",
+        "--manufacturer", "Realtek"
     ]
 
     # Realtek 802.11n WLAN Adapter
