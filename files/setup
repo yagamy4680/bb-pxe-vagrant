@@ -43,7 +43,12 @@ function configure_as_router {
 	run_cmd "/sbin/iptables -t nat -A POSTROUTING -s ${SUBNET}.0/24 -o ${WAN} -j MASQUERADE"
 	run_cmd "/sbin/route add default gw ${ROUTER} ${WAN}"
 
-	echo "please run '/usr/sbin/dnsmasq -d --conf-file=/tmp/dnsmasq.conf'"
+	echo "stop the existing dnsmasq daemon ..."
+	/etc/init.d/dnsmasq stop
+	ps aux | grep dnsmasq | grep -v grep | awk '{print $2}'
+
+	nohup /usr/sbin/dnsmasq -d --conf-file=/tmp/dnsmasq.conf > /tmp/dnsmasq.log 2>&1&
+	echo "running dnsmasq daemon on ${LAN} interface, with subnet ${SUBNET}.0. Log: /tmp/dnsmasq.log"
 }
 
 configure_as_router $@
