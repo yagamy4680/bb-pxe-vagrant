@@ -8,16 +8,32 @@
 import argparse
 import logging
 import os
+import netaddr
+import requests
+
+from io import BytesIO
+from urllib.parse import urlparse
+from colored import fg, bg, attr
 
 from fbtftp.base_handler import BaseHandler
 from fbtftp.base_handler import ResponseData
 from fbtftp.base_server import BaseServer
 
 
-class FileResponseData(ResponseData):
-    def __init__(self, path):
-        self._size = os.stat(path).st_size
-        self._reader = open(path, 'rb')
+class HttpResponseData(ResponseData):
+    def __init__(self, next_http_url, path, ip, mac):
+        url = "%s/%s" % (next_http_url, path)
+        qs = {'ip': ip, 'mac': mac}
+        self._r = r = requests.get(url, params=qs)
+        self._reader = BytesIO(r.content)
+        self._size = len(r.content)
+        logging.info("%s%s%s (%s%s%s) is looking for %s%s%s, responses from %s%s%s with %d bytes" % (
+            fg('yellow'), ip, attr('reset'),
+            fg('blue'), mac, attr('reset'),
+            fg('green'), path, attr('reset'),
+            fg('red'), next_http_url, attr('reset'),
+            self._size
+            ))
 
     def read(self, n):
         return self._reader.read(n)
@@ -58,48 +74,52 @@ def print_server_stats(stats):
         )
 
 
-class StaticHandler(BaseHandler):
-    def __init__(self, server_addr, peer, path, options, root, stats_callback):
-        self._root = root
-        super().__init__(server_addr, peer, path, options, stats_callback)
-        x = str(peer)
-        addr = peer[0]
-        with open('/tmp/dnsmasq.leases') as f:
+class HttpHandler(BaseHandler):
+    def __init__(self, server_addr, peer, path, options, dns_leases, next_http_url, stats_callback):
+        self._path = path
+        self._next_http_url = next_http_url
+        self._addr = addr = str(netaddr.IPNetwork(peer[0]).ipv4().ip)
+        with open(dns_leases) as f:
             data = f.read()
         lines = data.split('\n');
         lines = [ l for l in lines if l.find(addr) > 0 ]
-        print("peer => %s" % (x))
-        print("addr => %s" % (peer[0]))
-        print("lines => %s" % (lines))
-        if len(lines) > 0:
-            mac = lines[-1].split(' ')[1]
-            print("mac => %s" % (mac))
+        self._mac = lines[-1].split(' ')[1] if len(lines) > 0 else None
+        logging.info("%s%s%s (%s%s%s) is looking for %s%s%s" % (
+            fg('yellow'), self._addr, attr('reset'),
+            fg('blue'), self._mac, attr('reset'),
+            fg('green'), self._path, attr('reset')
+            ))
+        super().__init__(server_addr, peer, path, options, stats_callback)
 
     def get_response_data(self):
-        print("_root = %s, _path = %s" % (self._root, self._path))
-        # print("_peer => %s)" % (self._peer))
-        # print("_family => %s)" % (self._family))
-        return FileResponseData(os.path.join(self._root, self._path))
+        # print("get_response_data(): next => %s" % (self._next_http_url))
+        # print("get_response_data(): addr => %s" % (self._addr))
+        # print("get_response_data(): mac => %s" % (self._mac))
+        return None if self._addr is None or self._mac is None else HttpResponseData(self._next_http_url, self._path, self._addr, self._mac)
 
 
-class StaticServer(BaseServer):
+class ProxyServer(BaseServer):
     def __init__(
         self,
         address,
         port,
         retries,
         timeout,
-        root,
+        dns_leases,
+        next_http_url,
         handler_stats_callback,
         server_stats_callback=None
     ):
-        self._root = root
+        self._dns_leases = dns_leases
+        self._next_http_url = next_http_url
         self._handler_stats_callback = handler_stats_callback
         super().__init__(address, port, retries, timeout, server_stats_callback)
 
     def get_handler(self, server_addr, peer, path, options):
-        return StaticHandler(
-            server_addr, peer, path, options, self._root,
+        return HttpHandler(
+            server_addr, peer, path, options,
+            self._dns_leases,
+            self._next_http_url,
             self._handler_stats_callback
         )
 
@@ -131,10 +151,16 @@ def get_arguments():
         help='timeout for packet retransmission'
     )
     parser.add_argument(
-        '--root',
+        '--dns_leases',
+        type=str,
+        default='/tmp/dnsmasq.leases',
+        help='the dns lease file, to lookup mac address of given ip address'
+    )
+    parser.add_argument(
+        '--next',
         type=str,
         default='',
-        help='root of the static filesystem'
+        help='the next http server to process tftp requests'
     )
     return parser.parse_args()
 
@@ -142,12 +168,22 @@ def get_arguments():
 def main():
     args = get_arguments()
     logging.getLogger().setLevel(logging.DEBUG)
-    server = StaticServer(
+
+    x = urlparse(args.next)
+    if x.hostname is None:
+        return print("missing hostname in next-http-url is missing")
+    if x.hostname == "localhost":
+        return print("hostname in next-http-url shall not be `localhost`")
+    if x.hostname == "127.0.0.1":
+        return print("hostname in next-http-url shall not be `127.0.0.1`")
+
+    server = ProxyServer(
         args.ip,
         args.port,
         args.retries,
         args.timeout_s,
-        args.root,
+        args.dns_leases,
+        args.next,
         print_session_stats,
         print_server_stats,
     )
