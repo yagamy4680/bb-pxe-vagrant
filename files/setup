@@ -1,8 +1,26 @@
 #!/bin/bash
 #
 
+function LIGHT_GREEN {
+	local COLOR='\033[1;32m'
+	local NC='\033[0m'
+	echo "${COLOR}$@${NC}"
+}
+
+function YELLOW {
+	local COLOR='\033[0;33m'
+	local NC='\033[0m'
+	echo "${COLOR}$@${NC}"
+}
+
+function PURPLE {
+	local COLOR='\033[0;35m'
+	local NC='\033[0m'
+	echo "${COLOR}$@${NC}"
+}
+
 function run_cmd {
-	echo "$@"
+	echo -e "$(LIGHT_GREEN $@)"
 	${BASH} -c "$@"
 }
 
@@ -44,8 +62,8 @@ function configure_as_router {
 	run_cmd "/sbin/route add default gw ${ROUTER} ${WAN}"
 
 	echo "stop the existing dnsmasq daemon ..."
-	/etc/init.d/dnsmasq stop
-	ps aux | grep dnsmasq | grep -v grep | awk '{print $2}'
+	run_cmd "/etc/init.d/dnsmasq stop"
+	run_cmd "ps aux | grep dnsmasq | grep -v grep | awk '{print \$2}'"
 
 	nohup /usr/sbin/dnsmasq -d --conf-file=/tmp/dnsmasq.conf > /tmp/dnsmasq.log 2>&1&
 	echo "running dnsmasq daemon on ${LAN} interface, with subnet ${SUBNET}.0. Log: /tmp/dnsmasq.log"
